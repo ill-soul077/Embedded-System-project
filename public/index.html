@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Street Status</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 20px; }
+      h1 { margin-bottom: 4px; }
+      .muted { color: #666; font-size: 0.9em; }
+      .status { display: inline-flex; align-items: center; gap: 8px; }
+      .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+      .dot.green { background: #2ecc71; }
+      .dot.red { background: #e74c3c; }
+      table { border-collapse: collapse; width: 100%; max-width: 600px; margin-top: 12px; }
+      th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+      th { background: #f4f4f4; }
+      .row { margin-top: 12px; }
+      .card { border: 1px solid #ddd; padding: 12px; border-radius: 8px; max-width: 640px; }
+      code { background:#f8f8f8; padding:2px 4px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>Street Status</h1>
+    <div class="muted">Displays RTDB /street with computed fields. Auto-refreshes every 5s.</div>
+
+    <div class="card">
+      <div class="row">
+        <strong>Night:</strong>
+        <span id="night-status" class="status">
+          <span class="dot red"></span><span>OFF</span>
+        </span>
+      </div>
+
+      <div class="row">
+        <strong>Lights:</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Light</th>
+              <th>Status</th>
+              <th>Indicator</th>
+            </tr>
+          </thead>
+          <tbody id="lights-body">
+            <!-- rows inserted by JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <div class="row">
+        <strong>Speeds:</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Index</th>
+              <th>m/s</th>
+              <th>km/h</th>
+            </tr>
+          </thead>
+          <tbody id="speeds-body">
+          </tbody>
+        </table>
+      </div>
+
+      <div class="row">
+        <strong>Lights ON Count:</strong> <span id="lights-on-count">0</span>
+      </div>
+
+      <!-- <div class="row">
+        <strong>Last Update:</strong> <span id="last-update">-</span>
+      </div>
+      -->
+    </div> 
+
+    <div class="row muted">Raw API: <code>/api/street</code></div>
+
+    <script>
+      async function fetchStreet() {
+        try {
+          const res = await fetch('/api/street', { cache: 'no-store' });
+          if (!res.ok) throw new Error('Network response was not ok');
+          const data = await res.json();
+
+          // Night indicator
+          const night = !!data.night;
+          const nightEl = document.getElementById('night-status');
+          nightEl.innerHTML = '';
+          const dot = document.createElement('span');
+          dot.className = 'dot ' + (night ? 'green' : 'red');
+          const label = document.createElement('span');
+          label.textContent = night ? 'ON' : 'OFF';
+          nightEl.appendChild(dot);
+          nightEl.appendChild(label);
+
+          // Lights rows
+          const body = document.getElementById('lights-body');
+          body.innerHTML = '';
+          const relays_status = Array.isArray(data.relays_status) ? data.relays_status : [];
+          const relays = Array.isArray(data.relays) ? data.relays : [];
+          for (let i = 0; i < 4; i++) {
+            const statusText = relays_status[i] || (relays[i] ? 'ON' : 'OFF');
+            const isOn = statusText === 'ON';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>Light ${i + 1}</td>
+              <td><strong>${statusText}</strong></td>
+              <td><span class="dot ${isOn ? 'green' : 'red'}"></span></td>
+            `;
+            body.appendChild(tr);
+          }
+
+          // Speeds
+          const speedsBody = document.getElementById('speeds-body');
+          speedsBody.innerHTML = '';
+          // Prefer speeds_m_s, fallback to speeds
+          const speeds_ms = Array.isArray(data.speeds_m_s) ? data.speeds_m_s : (Array.isArray(data.speeds) ? data.speeds : []);
+          const speeds_kmh = Array.isArray(data.speeds_kmh) ? data.speeds_kmh : speeds_ms.map(s => +(s * 3.6).toFixed(3));
+          const len = Math.max(speeds_ms.length, speeds_kmh.length);
+          for (let i = 0; i < len; i++) {
+            const tr = document.createElement('tr');
+            const ms = speeds_ms[i] ?? '-';
+            const kmh = speeds_kmh[i] ?? '-';
+            tr.innerHTML = `
+              <td>${i}</td>
+              <td>${ms}</td>
+              <td>${kmh}</td>
+            `;
+            speedsBody.appendChild(tr);
+          }
+
+          // Lights on count
+          document.getElementById('lights-on-count').textContent = data.lights_on_count ?? 0;
+
+          // Last update
+          document.getElementById('last-update').textContent = data.timestamp_iso || '-';
+        } catch (e) {
+          console.error('Failed to fetch street:', e);
+        }
+      }
+
+      // Initial load and refresh every 5 seconds
+      fetchStreet();
+      setInterval(fetchStreet, 1000);
+    </script>
+  </body>
+  </html>

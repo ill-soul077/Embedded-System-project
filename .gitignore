@@ -1,0 +1,9 @@
+# Do not commit Firebase service account credentials
+service.json
+
+# Node.js common ignores
+node_modules/
+.env
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
